@@ -51,13 +51,17 @@ def copy_custom_parameters(source_sheet, target_sheet):
 
 class CADLinkWindow(forms.WPFWindow):
     def __init__(self, xaml_file_name, existing_sheets):
-        # Initialize window with the xaml file
         forms.WPFWindow.__init__(self, xaml_file_name)
         
         self.cad_files = []
         self.is_ok = False
         
-        # Populate the template sheet combobox
+        # Determine the next available sheet number for the default UI value
+        sheet_numbers = [s.SheetNumber for s in existing_sheets]
+        current_max = max(sheet_numbers) if sheet_numbers else "A100"
+        self.start_num_tb.Text = increment_sheet_number(current_max)
+        
+        # Populate the template sheet combobox (Sorted alphanumerically)
         self.sheet_dict = {"<None>": None}
         for sheet in existing_sheets:
             display_name = "{} - {}".format(sheet.SheetNumber, sheet.Name)
@@ -78,9 +82,12 @@ class CADLinkWindow(forms.WPFWindow):
             self.file_count_tb.Foreground = clr.Convert(System.Windows.Media.Brushes.Green, System.Windows.Media.Brush)
             
     def ok_clicked(self, sender, args):
-        # Validation checks before closing
         if not self.cad_files:
             forms.alert("Please browse and select at least one CAD file before continuing.", title="Missing Files")
+            return
+            
+        if not self.start_num_tb.Text:
+            forms.alert("Please provide a starting sheet number.", title="Missing Number")
             return
             
         try:
@@ -113,8 +120,9 @@ def main():
         
     titleblock_id = tb_collector[0].GetTypeId()
 
-    # 2. Collect existing sheets for the combobox and numbering logic
+    # 2. Collect existing sheets and sort them alphanumerically by Sheet Number
     all_sheets = DB.FilteredElementCollector(doc).OfClass(DB.ViewSheet).ToElements()
+    all_sheets = sorted(all_sheets, key=lambda s: s.SheetNumber)
     
     # 3. Launch UI Window
     ui_file = os.path.join(os.path.dirname(__file__), 'ui.xaml')
@@ -122,10 +130,12 @@ def main():
     window.ShowDialog()
     
     if not window.is_ok:
-        return # User canceled or closed window
+        return 
 
     # 4. Extract UI Inputs
     cad_files = window.cad_files
+    current_sheet_num = window.start_num_tb.Text
+    base_name = window.base_name_tb.Text
     prefix = window.prefix_tb.Text
     suffix = window.suffix_tb.Text
     scale_factor = float(window.scale_tb.Text)
@@ -137,20 +147,20 @@ def main():
     try:
         placement_pt = uidoc.Selection.PickPoint("Click the insertion point for the CAD links (Origin 0,0,0).")
     except Autodesk.Revit.Exceptions.OperationCanceledException:
-        return # User pressed ESC
-        
-    # Calculate starting sheet number
-    sheet_numbers = [s.SheetNumber for s in all_sheets]
-    current_sheet_num = max(sheet_numbers) if sheet_numbers else "A100"
+        return 
 
     # 6. Execute Batch Process
     successful_links = 0
     with revit.Transaction("Batch Link CAD to Sheets"):
         for file_path in cad_files:
-            current_sheet_num = increment_sheet_number(current_sheet_num)
             
-            filename = os.path.splitext(os.path.basename(file_path))[0]
-            sheet_name = "{}{}{}".format(prefix, filename, suffix)
+            # Determine Core Sheet Name
+            if base_name:
+                core_name = base_name
+            else:
+                core_name = os.path.splitext(os.path.basename(file_path))[0]
+                
+            sheet_name = "{}{}{}".format(prefix, core_name, suffix)
             
             # Create Sheet
             new_sheet = DB.ViewSheet.Create(doc, titleblock_id)
@@ -169,6 +179,9 @@ def main():
                 except Autodesk.Revit.Exceptions.ArgumentException:
                     current_sheet_num = increment_sheet_number(current_sheet_num)
                     attempts += 1
+            
+            # Setup for next loop iteration
+            current_sheet_num = increment_sheet_number(current_sheet_num)
             
             # Import Settings
             options = DB.DWGImportOptions()
