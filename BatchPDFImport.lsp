@@ -1,4 +1,4 @@
-(defun c:BatchPDFImport ( / pdfPath totalPages sheetW sheetH filePrefix outDir oldFileDia i ss dwgPath)
+(defun c:BatchPDFImport ( / pdfPath totalPages sheetW sheetH filePrefix outDir oldFileDia i ss dwgPath ssHatches)
   (vl-load-com)
   
   ; 1. Prompt for the PDF File via dialog box
@@ -13,12 +13,12 @@
     (progn (princ "\nInvalid page count. Exiting.") (exit))
   )
   
-  ; 3. Prompt for Boundary Dimensions (Defaults to 35.75 x 28.875)
+  ; 3. Prompt for Boundary Dimensions (Defaults to 35.75 x 27.875)
   (setq sheetW (getreal "\nEnter Sheet Width in inches <35.75>: "))
-  (if (not sheetW) (setq sheetW 35.75))
+  (if (not sheetW) (setq sheetW 34.5))
   
   (setq sheetH (getreal "\nEnter Sheet Height in inches <27.875>: "))
-  (if (not sheetH) (setq sheetH 27.875))
+  (if (not sheetH) (setq sheetH 27.0))
   
   ; 4. Prompt for Filename Prefix
   (setq filePrefix (getstring T "\nEnter filename prefix (e.g., Spec_Sheet_Page_): "))
@@ -33,7 +33,9 @@
   ; 6. System Variable Prep
   (setq oldFileDia (getvar "FILEDIA"))
   (setvar "FILEDIA" 0) 
-  (setvar "PDFIMPORTMODE" 15) 
+  
+  ; PDFIMPORTMODE 13 ignores Solid Fills to prevent text-mask hatching
+  (setvar "PDFIMPORTMODE" 13) 
   
   (setq i 1)
 
@@ -44,6 +46,12 @@
     
     ; Import the specific page at 1:1 scale
     (command "-PDFIMPORT" "File" pdfPath (itoa i) "0,0" "1.0" "0")
+    
+    ; Explicitly find and erase any remaining hatches or 2D solids as a failsafe
+    (setq ssHatches (ssget "X" '((0 . "HATCH,SOLID"))))
+    (if ssHatches
+      (command "_.ERASE" ssHatches "")
+    )
     
     ; Create a dedicated layer for the Revit boundary box
     ; USING OFF-WHITE (254,254,254) bypasses Revit's auto-invert feature
