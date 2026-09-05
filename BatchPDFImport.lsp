@@ -15,10 +15,10 @@
   
   ; 3. Prompt for Boundary Dimensions (Defaults to 35.75 x 27.875)
   (setq sheetW (getreal "\nEnter Sheet Width in inches <35.75>: "))
-  (if (not sheetW) (setq sheetW 34.5))
+  (if (not sheetW) (setq sheetW 35.75))
   
   (setq sheetH (getreal "\nEnter Sheet Height in inches <27.875>: "))
-  (if (not sheetH) (setq sheetH 27.0))
+  (if (not sheetH) (setq sheetH 27.875))
   
   ; 4. Prompt for Filename Prefix
   (setq filePrefix (getstring T "\nEnter filename prefix (e.g., Spec_Sheet_Page_): "))
